@@ -79,7 +79,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
           tags: |
-            ghcr.io/vyogotech/frappe-erpnext-for-operator:${{ steps.tags.outputs.tag }}
+            ghcr.io/vyogotech/erpnext-for-operator:${{ steps.tags.outputs.tag }}
           build-args: |
             FRAPPE_VERSION=${{ steps.tags.outputs.version }}
           cache-from: type=gha
@@ -94,7 +94,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
           tags: |
-            ghcr.io/vyogotech/frappe-standalone-for-operator:${{ steps.tags.outputs.tag }}
+            ghcr.io/vyogotech/frappe-for-operator:${{ steps.tags.outputs.tag }}
           build-args: |
             FRAPPE_BRANCH=${{ steps.tags.outputs.version }}
           cache-from: type=gha
