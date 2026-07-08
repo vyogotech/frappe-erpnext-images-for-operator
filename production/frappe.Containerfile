@@ -1,7 +1,7 @@
 ARG FRAPPE_BRANCH=version-15
 
 # --- Stage 1: Build the Bench ---
-FROM frappe/build:${FRAPPE_BRANCH} AS builder
+FROM docker.io/frappe/build:${FRAPPE_BRANCH} AS builder
 
 ARG FRAPPE_BRANCH=version-15
 ARG FRAPPE_PATH=https://github.com/frappe/frappe
@@ -27,7 +27,7 @@ WORKDIR /home/frappe
 RUN build_bench
 
 # --- Stage 2: Final Production Image ---
-FROM frappe/base:${FRAPPE_BRANCH} AS backend
+FROM docker.io/frappe/base:${FRAPPE_BRANCH} AS backend
 
 USER root
 
