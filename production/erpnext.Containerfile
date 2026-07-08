@@ -6,11 +6,12 @@ FROM frappe/erpnext:${FRAPPE_VERSION}
 
 USER root
 
-# Change the default frappe user UID to 1001 for OpenShift/production user requirements
+# Change the default frappe user UID to 1001 for OpenShift/production compatibility
 RUN usermod -u 1001 frappe || true
 
 # Apply OpenShift-compliant (group 0) permissions for non-root execution and asset caching
-RUN mv /home/frappe/frappe-bench/sites/assets /home/frappe/assets_cache && \
+# Note: Upstream packages assets at /home/frappe/frappe-bench/assets, so we move it to the cache
+RUN mv /home/frappe/frappe-bench/assets /home/frappe/assets_cache && \
     mkdir -p /home/frappe/frappe-bench/sites/assets /home/frappe/frappe-bench/logs && \
     chown -R 1001:0 /home/frappe /etc/nginx /var/log/nginx /var/lib/nginx /run && \
     chmod -R g=u /home/frappe /etc/nginx /var/log/nginx /var/lib/nginx /run && \
