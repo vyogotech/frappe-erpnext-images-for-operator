@@ -1,0 +1,80 @@
+ARG FRAPPE_BRANCH=version-15
+
+# --- Stage 1: Build the Bench ---
+FROM frappe/build:${FRAPPE_BRANCH} AS builder
+
+ARG FRAPPE_BRANCH=version-15
+ARG FRAPPE_PATH=https://github.com/frappe/frappe
+ARG ERPNEXT_REPO=https://github.com/frappe/erpnext
+ARG ERPNEXT_BRANCH=version-15
+ARG APPS=""
+ARG GITHUB_ORG=""
+ARG GH_BUILD_KEY=""
+
+# Keep UV disabled to prevent crashes under QEMU ARM64 emulation builds
+ENV BENCH_USE_UV=0
+ENV INSTALL_USE_UV=0
+
+USER root
+COPY resources/get_apps.py /usr/local/bin/get_apps
+COPY resources/build_bench.sh /usr/local/bin/build_bench
+RUN chmod +x /usr/local/bin/get_apps /usr/local/bin/build_bench
+
+USER frappe
+WORKDIR /home/frappe
+
+# Runs the bench initialization and app downloads
+RUN build_bench
+
+# --- Stage 2: Final Production Image ---
+FROM frappe/base:${FRAPPE_BRANCH} AS backend
+
+USER root
+
+# Change the default frappe user UID to 1001 for OpenShift/production compatibility
+RUN usermod -u 1001 frappe || true
+
+# Install missing runtime utilities required by the operator/restores
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y restic wait-for-it jq gettext-base && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the pre-built bench from the builder, ensuring ownership is user 1001 and group 0
+COPY --from=builder --chown=1001:0 /home/frappe/frappe-bench /home/frappe/frappe-bench
+
+# Apply OpenShift-compliant (group 0) permissions for non-root execution and asset caching
+RUN mv /home/frappe/frappe-bench/sites/assets /home/frappe/assets_cache && \
+    mkdir -p /home/frappe/frappe-bench/sites/assets /home/frappe/frappe-bench/logs && \
+    chown -R 1001:0 /home/frappe /etc/nginx /var/log/nginx /var/lib/nginx /run && \
+    chmod -R g=u /home/frappe /etc/nginx /var/log/nginx /var/lib/nginx /run && \
+    chmod g=u /etc/passwd
+
+# Setup entrypoints and templates
+COPY resources/nginx-template.conf /templates/nginx/frappe.conf.template
+COPY resources/nginx-entrypoint.sh /usr/local/bin/nginx-entrypoint.sh
+COPY resources/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/nginx-entrypoint.sh /usr/local/bin/entrypoint.sh
+
+USER 1001
+WORKDIR /home/frappe/frappe-bench
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+VOLUME [ \
+  "/home/frappe/frappe-bench/sites", \
+  "/home/frappe/frappe-bench/sites/assets", \
+  "/home/frappe/frappe-bench/logs" \
+]
+
+CMD [ \
+  "/home/frappe/frappe-bench/env/bin/gunicorn", \
+  "--chdir=/home/frappe/frappe-bench/sites", \
+  "--bind=0.0.0.0:8000", \
+  "--threads=4", \
+  "--workers=2", \
+  "--worker-class=gthread", \
+  "--worker-tmp-dir=/dev/shm", \
+  "--timeout=120", \
+  "--preload", \
+  "frappe.app:application" \
+]
