@@ -1,0 +1,101 @@
+name: Build and Publish Container Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'production/**'
+      - 'resources/**'
+      - '.github/workflows/container-build.yml'
+  workflow_dispatch:
+    inputs:
+      frappe_version:
+        description: 'Frappe/ERPNext branch/version to build'
+        required: true
+        default: 'version-15'
+        type: choice
+        options:
+          - 'version-15'
+          - 'version-16'
+          - 'develop'
+      push:
+        description: 'Push images to GitHub Container Registry'
+        required: true
+        default: true
+        type: boolean
+      custom_tag:
+        description: 'Custom tag (defaults to Frappe version if empty)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    name: Build Multi-Arch Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine Tags
+        id: tags
+        run: |
+          VERSION="${{ github.event.inputs.frappe_version || 'version-15' }}"
+          CUSTOM_TAG="${{ github.event.inputs.custom_tag }}"
+          
+          if [ -n "$CUSTOM_TAG" ]; then
+            TAG="$CUSTOM_TAG"
+          else
+            TAG="$VERSION"
+          fi
+          
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Build & Push ERPNext Image (Extending Upstream)
+      - name: Build and Push ERPNext Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: production/erpnext.Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
+          tags: |
+            ghcr.io/vyogotech/frappe-erpnext-for-operator:${{ steps.tags.outputs.tag }}
+          build-args: |
+            FRAPPE_VERSION=${{ steps.tags.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build & Push Standalone Frappe Image (Multi-stage Build)
+      - name: Build and Push Standalone Frappe Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: production/frappe.Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
+          tags: |
+            ghcr.io/vyogotech/frappe-standalone-for-operator:${{ steps.tags.outputs.tag }}
+          build-args: |
+            FRAPPE_BRANCH=${{ steps.tags.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
