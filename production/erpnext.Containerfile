@@ -2,7 +2,7 @@ ARG FRAPPE_VERSION=version-15
 
 # Directly extend the official frappe/erpnext production image which contains all core runtimes 
 # (Python, NodeJS, Yarn, wkhtmltopdf, Nginx, Restic, wait-for-it, etc.)
-FROM frappe/erpnext:${FRAPPE_VERSION}
+FROM docker.io/frappe/erpnext:${FRAPPE_VERSION}
 
 USER root
 
