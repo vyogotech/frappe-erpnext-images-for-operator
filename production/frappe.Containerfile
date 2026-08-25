@@ -34,9 +34,22 @@ USER root
 # Change the default frappe user UID to 1001 for OpenShift/production compatibility
 RUN usermod -u 1001 frappe || true
 
-# Install missing runtime utilities required by the operator/restores
+# Install missing runtime utilities required by the operator/restores.
+#
+# Node.js + yarn are included on purpose: this is a PaaS runtime where the
+# operator installs apps AFTER the image is built (bench install-app via the
+# SiteApp controller). Installing an app runs `bench build --app <app>` to
+# compile its JS/CSS bundle, which needs node — and frappe/base ships none. Without
+# it a runtime-installed app has no assets in sites/assets/<app>/, and the desk
+# 500s loading the missing bundle. Frappe 15/16 build cleanly on Node 20 LTS.
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y restic wait-for-it jq gettext-base && \
+    apt-get install --no-install-recommends -y restic wait-for-it jq gettext-base ca-certificates curl gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install --no-install-recommends -y nodejs && \
+    corepack enable && corepack prepare yarn@stable --activate 2>/dev/null || npm install -g yarn && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the pre-built bench from the builder, ensuring ownership is user 1001 and group 0
