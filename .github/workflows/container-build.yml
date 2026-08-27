@@ -99,3 +99,22 @@ jobs:
             FRAPPE_BRANCH=${{ steps.tags.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Build & Push FPM builder image (packages apps from git into .fpm).
+      # amd64 only: the AppBuild pipeline runs on amd64 cluster nodes. Based on
+      # frappe/build (working node + yarn-classic) + the fpm CLI, so `bench build`
+      # actually compiles assets — unlike the corepack-yarn runtime image.
+      - name: Build and Push FPM Builder Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: production/fpm-builder.Containerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
+          tags: |
+            ghcr.io/vyogotech/fpm-builder:${{ steps.tags.outputs.tag }}
+          build-args: |
+            FRAPPE_BRANCH=${{ steps.tags.outputs.version }}
+            FPM_VERSION=v2.2.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
