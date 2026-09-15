@@ -70,6 +70,26 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Tags: the moving tag (version-16) plus an immutable one (version-16-<sha>)
+      # so a consumer can pin exactly what it tested. Labels carry the source
+      # repo and commit so any image can be traced back from the registry.
+      - name: Image metadata (ERPNext)
+        id: meta_erpnext
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/vyogotech/erpnext-for-operator
+          tags: |
+            type=raw,value=${{ steps.tags.outputs.tag }}
+            type=raw,value=${{ steps.tags.outputs.tag }}-{{sha}}
+      - name: Image metadata (Frappe)
+        id: meta_frappe
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/vyogotech/frappe-for-operator
+          tags: |
+            type=raw,value=${{ steps.tags.outputs.tag }}
+            type=raw,value=${{ steps.tags.outputs.tag }}-{{sha}}
+
       # Build & Push ERPNext Image (Extending Upstream)
       - name: Build and Push ERPNext Image
         uses: docker/build-push-action@v5
@@ -78,8 +98,8 @@ jobs:
           file: production/erpnext.Containerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
-          tags: |
-            ghcr.io/vyogotech/erpnext-for-operator:${{ steps.tags.outputs.tag }}
+          tags: ${{ steps.meta_erpnext.outputs.tags }}
+          labels: ${{ steps.meta_erpnext.outputs.labels }}
           build-args: |
             FRAPPE_VERSION=${{ steps.tags.outputs.version }}
           cache-from: type=gha
@@ -93,8 +113,8 @@ jobs:
           file: production/frappe.Containerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push == 'true' || github.event_name == 'push') }}
-          tags: |
-            ghcr.io/vyogotech/frappe-for-operator:${{ steps.tags.outputs.tag }}
+          tags: ${{ steps.meta_frappe.outputs.tags }}
+          labels: ${{ steps.meta_frappe.outputs.labels }}
           build-args: |
             FRAPPE_BRANCH=${{ steps.tags.outputs.version }}
           cache-from: type=gha
